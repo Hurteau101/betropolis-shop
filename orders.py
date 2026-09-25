@@ -1,5 +1,6 @@
 import discord
 from database import User, Session, Order, Product
+from shop import CancelOrderView
 
 async def order_look_up_process(interaction: discord.Interaction, order_id: int, member: discord.Member):
     async with Session() as session:
@@ -45,6 +46,12 @@ async def update_forum(interaction, order):
 
     await embed_data.edit(embed=post_embed)
 
+async def remove_cancel_button(channel):
+    async for msg in channel.history(limit=5, oldest_first=True):
+        if any(getattr(c, "custom_id", None) == "cancel:order" for row in msg.components for c in row.children):
+            await msg.edit(view=None)
+            break
+
 async def customer_form_button(view_modal, interaction, view_id, disabled: bool):
     view = view_modal()
 
@@ -71,6 +78,8 @@ class GiftCardValueForm(discord.ui.Modal, title="Gift Card Code Form"):
 
         if order is None or db_user is None:
             return
+
+        await remove_cancel_button(interaction.channel)
 
         user = interaction.guild.get_member(int(db_user.user_id))
 
@@ -164,6 +173,8 @@ class GiftCardEmailModal(PersistentModal, title="Gift Card Email"):
         if order is None or db_user is None:
             return
 
+        await remove_cancel_button(interaction.channel)
+
         embed = discord.Embed(
             title="Order Approved",
             description=f"{self.user.mention} Your order has been approved by {self.admin_user.display_name}.",
@@ -201,6 +212,8 @@ class PsychicalModal(PersistentModal, title="Physical Form"):
 
         if order is None or db_user is None:
             return
+
+        await remove_cancel_button(interaction.channel)
 
         embed = discord.Embed(
             title="Order Approved",

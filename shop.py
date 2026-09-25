@@ -82,7 +82,7 @@ class ShopButtons(discord.ui.View):
 
 
 class CancelOrderView(discord.ui.View):
-    def __init__(self, owner_role_id):
+    def __init__(self, owner_role_id=None):
         self.owner_role_id = owner_role_id
         super().__init__(timeout=None)
 
