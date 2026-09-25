@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from discord.ext import commands
 from helpers import is_in_allowed_channels, base_user_embed, get_single_user, get_user_information, WrongChannel, \
     base_admin_profile_embed, is_in_allowed_category
-from orders import GiftCardValueForm, GiftCardEmailView, PsychicalView
+from orders import GiftCardValueForm, GiftCardEmailView, PsychicalView, CloseConfirmationModal
 from shop import AddItemModal, ShopButtons, CancelOrderView
 from database import Session, User, Order
 
@@ -71,8 +71,8 @@ async def on_ready():
 @bot.event
 async def setup_hook():
     bot.add_view(ShopButtons(bot=bot, guild_id=CONFIGS["guild_id"], owner_role_id=CONFIGS["owner_role_id"], order_category_id=CONFIGS["order_category_id"]))
-    # bot.add_view(ApproveButton(owner_role_id=CONFIGS["owner_role_id"], bot=bot, guild_id=CONFIGS["guild_id"]))
     bot.add_view(GiftCardEmailView())
+    bot.add_view(PsychicalView())
     bot.add_view(CancelOrderView(owner_role_id=CONFIGS["owner_role_id"]))
 
 @bot.event
@@ -95,6 +95,64 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     else:
         raise error
 
+
+@bot.tree.command(name="bot-help")
+@is_in_allowed_channels(CONFIGS["allowed_command_channel"])
+@app_commands.checks.has_role(CONFIGS["owner_role_id"])
+async def help(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="Help Documentation",
+        description=f"Break down of different commands",
+        color=discord.Color.green()
+    )
+
+    embed.add_field(
+        name="Token Commands",
+        value=(
+            "`/add-tokens` - Add tokens to a user\n"
+            "`/subtract-tokens` - Remove tokens from a user\n"
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
+        name="User Commands",
+        value=(
+            "`/check-balance` - Check current balance"
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
+        name="Item Commands",
+        value=(
+            "`/add-item` - Add an item to the shop"
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
+        name="Profile Commands",
+        value=(
+            "`/get-user` - Display User Information"
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
+        name="Order Commands",
+        value=(
+            "`/reject-order` - Rejects the order\n"
+            "`/approve-order` - Approve the order\n"
+            "`/close-order` - Close the order and delete channel\n"
+        ),
+        inline=False,
+    )
+
+    embed.set_author(name=bot.user.name, icon_url=bot.user.display_avatar.url)
+    embed.set_thumbnail(url=bot.user.display_avatar.url)
+
+    await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="check-balance")
 async def check_balance(interaction: discord.Interaction):
@@ -256,6 +314,11 @@ async def approve_order(interaction: discord.Interaction, order_type: str):
             view=PsychicalView(bot=bot, user=user, order_id=order.id, admin_user=admin_user),
         )
 
+@bot.tree.command(name="close-order")
+@app_commands.checks.has_role(CONFIGS["owner_role_id"])
+@is_in_allowed_category(CONFIGS["order_category_id"])
+async def close_order(interaction: discord.Interaction):
+    await interaction.response.send_modal(CloseConfirmationModal())
 
 @bot.tree.command(name="add-item")
 @app_commands.checks.has_role(CONFIGS["owner_role_id"])

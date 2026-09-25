@@ -245,6 +245,22 @@ class PsychicalModal(PersistentModal, title="Physical Form"):
 
 
 
+class CloseConfirmationModal(discord.ui.Modal, title="Confirm Close Order"):
+    confirm_close = discord.ui.Label(
+        text="Confirm channel deletion",
+        description="This channel will be deleted forever and cannot be recovered.",
+        component=discord.ui.Checkbox(),
+    )
+
+    async def on_submit(self, interaction):
+        if self.confirm_close.component.value:
+            await interaction.response.defer(ephemeral=True)
+            await interaction.channel.delete()
+        else:
+            await interaction.response.send_message("Please confirm that you want to close this channel.", ephemeral=True)
+
+
+
 
 # class ApproveButton(discord.ui.View):
 #     def __init__(self, owner_role_id, bot, guild_id):
