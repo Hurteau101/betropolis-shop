@@ -122,8 +122,9 @@ class User(Base):
     async def add_user(cls, db_session: AsyncSession, user_id: int):
         stmt = insert(User).values(user_id=user_id)
         stmt = stmt.on_conflict_do_nothing(index_elements=["user_id"])
-        await db_session.execute(stmt)
+        result = await db_session.execute(stmt)
         await db_session.commit()
+        return result.rowcount > 0
 
     @classmethod
     async def get_user_orders(cls, db_session: AsyncSession, user_id: int, open_orders_only: bool = False):

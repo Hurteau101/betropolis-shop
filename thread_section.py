@@ -82,6 +82,27 @@ async def on_member_join(member):
         await User.add_user(session, member.id)
 
 
+@bot.tree.command(name="add-user")
+@is_in_allowed_channels(CONFIGS["allowed_command_channel"])
+@app_commands.checks.has_role(CONFIGS["owner_role_id"])
+@app_commands.describe(
+    user_id="The ID of the user to add.",
+)
+async def add_user(interaction: discord.Interaction, user_id: str):
+    try:
+        uid = int(user_id)
+    except ValueError:
+        await interaction.response.send_message("That's not a valid user ID.", ephemeral=True)
+        return
+
+    async with Session() as session:
+        user = await User.add_user(session, uid)
+        if not user:
+            await interaction.response.send_message("User already exists in the database.", ephemeral=True)
+            return
+
+    await interaction.response.send_message(f"Added user with ID {uid} to the database.")
+
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     if isinstance(error, app_commands.MissingRole):
@@ -134,7 +155,8 @@ async def help(interaction: discord.Interaction):
     embed.add_field(
         name="Profile Commands",
         value=(
-            "`/get-user` - Display User Information"
+            "`/get-user` - Display User Information\n"
+            "`/add-user` - Add User Information"
         ),
         inline=False,
     )

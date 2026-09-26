@@ -7,9 +7,15 @@ from database import Session, User, Order, Product
 class WrongChannel(app_commands.CheckFailure):
     pass
 
-async def get_user_information(interaction:discord.Interaction, user_id: Optional[str] = None, display_name: Optional[str] = None):
+async def get_user_information(interaction:discord.Interaction, user_id: Optional[str | int] = None, display_name: Optional[str] = None):
     """Find the discord user"""
     if user_id:
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            await interaction.response.send_message("That's not a valid user ID.", ephemeral=True)
+            return None
+
         return interaction.guild.get_member(int(user_id))
     elif display_name:
         return discord.utils.find(
@@ -26,13 +32,13 @@ async def get_single_user(interaction: discord.Interaction, member: discord.Memb
         db_user = await User.get_user(db_session=session, user_id=member.id)
         if not db_user:
             await interaction.response.send_message(error_message, ephemeral=True)
-            return None
+            return None, None
 
         if get_orders:
             user_orders = await User.get_user_orders(db_session=session, user_id=member.id)
             return db_user, user_orders
 
-    return db_user
+    return db_user, None
 
 
 def base_user_embed(title: str, member: discord.Member, discord_client: discord.Client, description: str = ''):
