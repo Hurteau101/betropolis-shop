@@ -424,14 +424,15 @@ async def on_thread_create(thread: discord.Thread):
 
     embed = discord.Embed(
         title="Manual Product Creation Warning",
-        description=f"{admin_role.mention} - Please delete this product immediately",
+        description=f"{admin_role.mention}",
         color=discord.Color.red()
     )
 
     embed.add_field(name="Title", value=thread.name, inline=False)
     embed.add_field(name="Thread ID", value=thread.id, inline=False)
-    embed.add_field(name="Additional Info", value="This product was created manually and should never be created through the actual forum. Please use /add-item instead.", inline=False)
+    embed.add_field(name="Additional Info", value="This product was created manually and should never be created through the actual forum. This product was deleted. Please use /add-item instead.", inline=False)
 
+    await thread.delete(reason="Product listing message was deleted")
     await log_channel.send(embed=embed)
 
 
