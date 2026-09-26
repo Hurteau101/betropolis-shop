@@ -127,10 +127,10 @@ class User(Base):
 
     @classmethod
     async def get_user_orders(cls, db_session: AsyncSession, user_id: int, open_orders_only: bool = False):
-        stmt = select(Order).where(Order.user_id == user_id)
+        stmt = select(Order).where(Order.user_id == user_id).options(selectinload(Order.product))
 
         if open_orders_only:
-            stmt = stmt.where(Order.completed == False)
+            stmt = stmt.where(Order.completed.is_(False), Order.order_rejected.is_(False))
 
         result = await db_session.execute(stmt)
         return result.scalars().all()
@@ -222,6 +222,11 @@ class Order(Base):
     completed_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.product_id", ondelete="CASCADE"))
     product: Mapped[Product] = relationship(back_populates="orders")
+    order_rejected: Mapped[bool] = mapped_column(default=False)
+    order_rejected_by: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    order_reject_reason: Mapped[str | None] = mapped_column(default=None)
+    order_cancelled: Mapped[bool] = mapped_column(default=False)
+    order_cancelled_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     @classmethod
     async def delete_order(cls, db_session: AsyncSession, order_id: int):
@@ -229,6 +234,21 @@ class Order(Base):
         result = await db_session.execute(stmt)
         await db_session.commit()
         return result.rowcount > 0
+
+    @classmethod
+    async def cancel_order(cls, db_session: AsyncSession, order_id: int):
+        current_date = datetime.now(UTC)
+        stmt = (
+            update(Order)
+            .where(Order.id == order_id, Order.completed == False, Order.order_rejected == False)
+            .values(order_cancelled=True, order_cancelled_date=current_date)
+            .returning(Order)
+            .options(selectinload(Order.product))
+        )
+
+        result = await db_session.execute(stmt)
+        await db_session.commit()
+        return result.scalar_one_or_none()
 
     @classmethod
     async def add_order(cls, db_session: AsyncSession, user_id: int, product_id: int, should_commit: bool = True):
@@ -248,18 +268,37 @@ class Order(Base):
         return result.scalar_one_or_none()
 
     @classmethod
-    async def update_order(cls, db_session: AsyncSession, order_id: int, completed: bool, completed_by: int):
+    async def update_order(cls, db_session: AsyncSession, order_id: int, completed: bool, completed_by: int = None,
+                           is_rejected: bool = False, rejected_by: int = None, reject_reason: str = None,
+                           auto_commit: bool = False):
         current_date = datetime.now(UTC)
 
         stmt = (
             update(Order)
-            .where(Order.id == order_id, Order.completed == False)
-            .values(completed=completed, completed_by=completed_by, completed_date=current_date)
+            .where(Order.id == order_id, Order.completed == False, Order.order_rejected == False, Order.order_cancelled == False)
+            .values(completed=completed)
             .returning(Order)
             .options(selectinload(Order.product))
         )
 
+        if completed:
+            stmt = stmt.values(
+                completed_by=completed_by,
+                completed_date=current_date,
+            )
+
+        if is_rejected and all([rejected_by, reject_reason]):
+            stmt = stmt.values(
+                order_rejected=True,
+                order_rejected_by=rejected_by,
+                order_reject_reason=reject_reason,
+            )
+
         result = await db_session.execute(stmt)
+
+        if auto_commit:
+            await db_session.commit()
+
         return result.scalar_one_or_none()
 
     @classmethod

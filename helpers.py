@@ -1,7 +1,7 @@
 from typing import Optional
 import discord
 from discord import app_commands, Interaction
-from database import Session, User, Order
+from database import Session, User, Order, Product
 
 
 class WrongChannel(app_commands.CheckFailure):
@@ -57,8 +57,16 @@ def base_admin_profile_embed(member: discord.Member, db_user: User, bot: discord
         open_orders = sum(1 for order in user_orders if not order.completed)
         embed.add_field(name="Open Orders", value=open_orders, inline=False)
         embed.add_field(name="Total Orders", value=len(user_orders), inline=False)
+        lines = [
+            f"#{order.id:<4} {order.product.name[:20]:<20} {order.product.price:g} Tokens"
+            for order in user_orders
+            if not order.completed
+        ]
 
-    embed.add_field(name="Created At", value=f"{db_user.created_date.strftime('%Y-%m-%d %H:%M:%S')}", inline=False)
+        if lines:
+            embed.add_field(name="Open Orders", value="```\n" + "\n".join(lines) + "\n```", inline=False)
+
+    embed.add_field(name="User Created At", value=f"{db_user.created_date.strftime('%Y-%m-%d %H:%M:%S')}", inline=False)
 
     return embed
 

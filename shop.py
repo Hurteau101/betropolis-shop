@@ -10,6 +10,10 @@ from orders import update_forum
 async def validate_price_stock(price_stock: str, interaction: discord.Interaction):
     parts = [ps.strip() for ps in price_stock.split(",")]
 
+    if len(parts) != 2:
+        await interaction.followup.send("Format must be `price, stock`, like `100, 10`.", ephemeral=True)
+        return None, None
+
     try:
         price = Decimal(parts[0])
         stock = int(parts[1])
@@ -125,9 +129,9 @@ class CancelOrderView(discord.ui.View):
                 await interaction.edit_original_response(view=self)
                 return await interaction.followup.send("Only the buyer can cancel this order.", ephemeral=True)
 
-            deleted = await Order.delete_order(session, order.id)
+            cancelled = await Order.cancel_order(session, order.id)
 
-            if not deleted:
+            if not cancelled:
                 return await interaction.followup.send("This order was already cancelled.", ephemeral=True)
 
             await interaction.channel.set_permissions(member, read_messages=True, send_messages=False)

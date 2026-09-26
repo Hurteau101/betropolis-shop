@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from discord.ext import commands
 from helpers import is_in_allowed_channels, base_user_embed, get_single_user, get_user_information, WrongChannel, \
     base_admin_profile_embed, is_in_allowed_category
-from orders import GiftCardValueForm, GiftCardEmailView, PsychicalView, CloseConfirmationModal
+from orders import GiftCardValueForm, GiftCardEmailView, PsychicalView, CloseConfirmationModal, remove_cancel_button
 from shop import AddItemModal, ShopButtons, CancelOrderView, EditItemModal
 from database import Session, User, Order, Product
 
@@ -262,11 +262,26 @@ async def reject_order(interaction: discord.Interaction, reason: str):
     async with Session() as session:
         order = await Order.find_by_channel(session, interaction.channel.id)
 
-    if order is None:
-        return await interaction.response.send_message("No order found for this ticket.", ephemeral=True)
+        if order is None:
+            return await interaction.response.send_message("No order found for this ticket.", ephemeral=True)
+
+        updated_order = await Order.update_order(
+            db_session=session,
+            order_id=order.id,
+            completed=False,
+            is_rejected=True,
+            rejected_by=interaction.user.id,
+            reject_reason=reason,
+            auto_commit=True,
+        )
+
+        if not updated_order:
+            return await interaction.response.send_message("Failed to update order.", ephemeral=True)
 
     user = interaction.guild.get_member(int(order.user_id))
     admin_user = interaction.user
+
+    await remove_cancel_button(interaction.channel)
 
     embed = discord.Embed(
         title="Order Rejected",
@@ -314,7 +329,17 @@ async def approve_order(interaction: discord.Interaction, order_type: str):
 @app_commands.checks.has_role(CONFIGS["owner_role_id"])
 @is_in_allowed_category(CONFIGS["order_category_id"])
 async def close_order(interaction: discord.Interaction):
-    await interaction.response.send_modal(CloseConfirmationModal())
+    async with Session() as session:
+        order = await Order.find_by_channel(session, interaction.channel.id)
+
+        if order is None:
+            return await interaction.response.send_message("No order found for this ticket.", ephemeral=True)
+
+        if not (order.completed or order.order_rejected or order.order_cancelled):
+            return await interaction.response.send_message("Order needs to be completed or rejected before closing.",
+                                                           ephemeral=True)
+
+    return await interaction.response.send_modal(CloseConfirmationModal())
 
 @bot.tree.command(name="add-item")
 @app_commands.checks.has_role(CONFIGS["owner_role_id"])
@@ -343,51 +368,3 @@ async def add_item(interaction: discord.Interaction, product_id: int):
     return await interaction.response.send_modal(EditItemModal(product))
 
 bot.run(CONFIGS["bot_token"])
-
-
-#### TEST FUNCTIONS BELOW ###
-
-#
-# @bot.tree.command(name="get-all-members")
-# @app_commands.checks.has_role(CONFIGS["owner_role_id"])
-# async def get_all_members(interaction: discord.Interaction):
-#     async with Session() as session:
-#         # data = await User.get_users(session)
-#         # print(data)
-#         user = await User.get_user(db_session=session, user_id=1160420519884095488)
-#
-#
-#         # members = [
-#         #     {"user_id": member.id}
-#         #     for member in interaction.guild.members
-#         #     if not member.bot
-#         # ]
-#         #
-#         # await User.insert_users(session, members)
-#
-#         # for member in interaction.guild.members:
-#         #     if member.bot:
-#         #         continue
-#         #
-#         # print(f"{member.name} | {member.id}")
-#
-#     await interaction.response.send_message("Printed members to the console.", ephemeral=True)
-
-#
-# @bot.tree.command(name="info")
-# async def info(interaction: discord.Interaction):
-#     guild_id = CONFIGS["guild_id"]
-#     owner_role_id = CONFIGS["owner_role_id"]
-#     # await interaction.response.send_message(f"This server's ID is {guild_id}")
-#     guild = bot.get_guild(guild_id)
-#     role = guild.get_role(owner_role_id)
-#
-#     role_name = f"Role Name: {role.name} | Role ID: {role.id}"
-#     await interaction.channel.send(role_name)
-
-    # roles = ''.join([str(role) for role in guild.roles])
-    #
-    # await interaction.channel.send(f"Role: {roles}")
-
-    # await interaction.channel.send(f"This server's ID is {guild_id}")
-    # await interaction.channel.send(f"This server's ID is {role.name}")
