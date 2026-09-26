@@ -409,7 +409,7 @@ async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
     embed.add_field(name="Thread ID", value=thread.id, inline=False)
     embed.add_field(name="Additional Info", value="This post was deleted. Please re-add the item with /add-item. ", inline=False)
 
-    await thread.delete(reason="Product listing message was deleted")
+    await thread.delete(reason="Invalid Add")
     await log_channel.send(embed=embed)
 
 @bot.event
