@@ -149,6 +149,18 @@ class Product(Base):
     orders: Mapped[list["Order"]] = relationship(back_populates="product")
 
     @classmethod
+    async def find_product_by_thread_id(cls, db_session: AsyncSession, thread_id: int):
+        result = await db_session.execute(select(cls).where(cls.thread_id == thread_id))
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def delete_product(cls, db_session: AsyncSession, thread_id: int):
+        result = await db_session.execute(delete(cls).where(cls.thread_id == thread_id))
+        await db_session.commit()
+        return result.rowcount > 0
+
+
+    @classmethod
     async def add_product(cls, db_session: AsyncSession, name: str, price: int | float | decimal.Decimal, stock: int, thread_id: int,
                           description: str, tags: str):
         if isinstance(price, (int, float)):
