@@ -4,10 +4,10 @@ import os
 from datetime import datetime, UTC
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, URL, DateTime, ForeignKey, select, BigInteger, BIGINT, Numeric, update, delete
+from sqlalchemy import URL, DateTime, ForeignKey, select, BigInteger, Numeric, update, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio.engine import create_async_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, selectinload, joinedload
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, selectinload
 from dotenv import load_dotenv
 load_dotenv()
 

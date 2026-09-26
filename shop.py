@@ -1,9 +1,6 @@
-import random
-import string
 from decimal import Decimal, InvalidOperation
 import discord
 from database import Session, User, Order, Product
-from orders import update_forum
 
 ### await interaction.response.defer(ephemeral=True) -- Always above slow process. [ephemeral == only the user sees who actioned - next follow up message inherits]
 

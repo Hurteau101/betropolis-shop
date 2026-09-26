@@ -1,7 +1,7 @@
 from typing import Optional
 import discord
 from discord import app_commands, Interaction
-from database import Session, User, Order, Product
+from database import Session, User
 
 
 class WrongChannel(app_commands.CheckFailure):
