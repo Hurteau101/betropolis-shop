@@ -432,7 +432,7 @@ async def on_thread_create(thread: discord.Thread):
     embed.add_field(name="Thread ID", value=thread.id, inline=False)
     embed.add_field(name="Additional Info", value="This product was created manually and should never be created through the actual forum. This product was deleted. Please use /add-item instead.", inline=False)
 
-    await thread.delete(reason="Product listing message was deleted")
+    await thread.delete(reason="Invalid Delete")
     await log_channel.send(embed=embed)
 
 
