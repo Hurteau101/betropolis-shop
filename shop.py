@@ -151,17 +151,28 @@ class EditItemModal(discord.ui.Modal, title="Edit Item"):
     item_title = discord.ui.TextInput(label="Item Title", placeholder="Enter the item title")
     item_description = discord.ui.TextInput(label="Card Description", placeholder="Enter the item description")
     price_stock = discord.ui.TextInput(label="Price, Stock", placeholder="100, 10")
-    tags = discord.ui.Label(text="Tags (comma separated)", component=discord.ui.TextInput(placeholder="Amazon, 100-199PTS"))
+    # tags = discord.ui.Label(text="Tags (comma separated)", component=discord.ui.TextInput(placeholder="Amazon, 100-199PTS"))
+    tags = discord.ui.Label(
+        text="Tags",
+        component=discord.ui.Select(placeholder="Select tags", min_values=0, required=False),
+    )
     image = discord.ui.Label(text="Image", component=discord.ui.FileUpload(max_values=1, required=False))
 
-    def __init__(self, product):
+    def __init__(self, product, forum):
         super().__init__()
         self.item_title.default = product.name
         self.item_description.default = product.description
         self.price_stock.default = f"{int(product.price)}, {product.stock}"
-        self.tags.component.default = product.tags
+        # self.tags.component.default = product.tags
         self.product_id = product.product_id
         self.thread_id = product.thread_id
+
+        current = [t.strip() for t in (product.tags or "").split(",")]
+        self.tags.component.options = [
+            discord.SelectOption(label=tag.name, value=str(tag.id), default=tag.name.lower() in current)
+            for tag in forum.available_tags
+        ]
+        self.tags.component.max_values = min(5, len(forum.available_tags))
 
     async def on_submit(self, interaction):
         await interaction.response.defer(ephemeral=True)
@@ -179,13 +190,19 @@ class EditItemModal(discord.ui.Modal, title="Edit Item"):
                 stock=stock,
                 thread_id=self.thread_id,
                 description=self.item_description.value,
-                tags=", ".join(tag.strip().lower() for tag in self.tags.component.value.split(",")),
+                tags=", ".join(
+                    opt.label.lower() for opt in self.tags.component.options
+                    if opt.value in self.tags.component.values
+                ),
             )
 
             if not product:
                 return await interaction.followup.send("Product not found.", ephemeral=True)
 
         thread = interaction.guild.get_thread(self.thread_id) or await interaction.guild.fetch_channel(self.thread_id)
+        if thread.archived:
+            await thread.edit(archived=False)
+            
         message = await thread.fetch_message(self.thread_id)
         embed = message.embeds[0]
 
@@ -218,8 +235,9 @@ class EditItemModal(discord.ui.Modal, title="Edit Item"):
             await interaction.followup.send("Item updated.", ephemeral=True)
 
         forum = thread.parent
-        tag_wanted = [tag.strip().lower() for tag in self.tags.component.value.split(",")]
-        new_tags = [tag for tag in forum.available_tags if tag.name.lower() in tag_wanted]
+        # tag_wanted = [tag.strip().lower() for tag in self.tags.component.value.split(",")]
+        # new_tags = [tag for tag in forum.available_tags if tag.name.lower() in tag_wanted]
+        new_tags = [tag for tag in forum.available_tags if str(tag.id) in self.tags.component.values]
         await thread.edit(applied_tags=new_tags[:5])
 
         if title_changed:
@@ -235,10 +253,20 @@ class AddItemModal(discord.ui.Modal, title="Add Item"):
         self.order_category_id = kwargs.pop("order_category_id")
         super().__init__(*args, **kwargs)
 
+        forum = self.bot.get_channel(self.forum_channel)
+        self.tags.component.options = [
+            discord.SelectOption(label=tag.name, value=str(tag.id)) for tag in forum.available_tags
+        ]
+        self.tags.component.max_values = min(5, len(forum.available_tags))
+
     item_title = discord.ui.TextInput(label="Item Title", placeholder="Enter the item title")
     item_description = discord.ui.TextInput(label="Card Description", placeholder="Enter the item description")
     price_stock = discord.ui.TextInput(label="Price, Stock", placeholder="100, 10")
-    tags = discord.ui.Label(text="Tags (comma separated)", component=discord.ui.TextInput(placeholder="Amazon, 100-199PTS", required=False))
+    # tags = discord.ui.Label(text="Tags (comma separated)", component=discord.ui.TextInput(placeholder="Amazon, 100-199PTS", required=False))
+    tags = discord.ui.Label(
+        text="Tags",
+        component=discord.ui.Select(placeholder="Select tags", min_values=0, required=False),
+    )
     image = discord.ui.Label(text="Image", component=discord.ui.FileUpload(max_values=1, required=True))
 
     async def on_submit(self, interaction):
@@ -262,8 +290,10 @@ class AddItemModal(discord.ui.Modal, title="Add Item"):
         embed.add_field(name="Stock", value=stock)
         embed.set_image(url="attachment://item.png")
 
-        tag_wanted = [tag.strip().lower() for tag in self.tags.component.value.split(",")]
-        tags = [tag for tag in forum.available_tags if tag.name.lower() in tag_wanted]
+        # tag_wanted = [tag.strip().lower() for tag in self.tags.component.value.split(",")]
+        # tag_wanted = [tag for tag in forum.available_tags if str(tag.id) in self.tags.component.values]
+        # tags = [tag for tag in forum.available_tags if tag.name.lower() in tag_wanted]
+        tags = [tag for tag in forum.available_tags if str(tag.id) in self.tags.component.values]
 
         post = await forum.create_thread(
             name=f"{self.item_title.value}",
@@ -275,7 +305,7 @@ class AddItemModal(discord.ui.Modal, title="Add Item"):
 
         async with Session() as session:
             product_id = await Product.add_product(db_session=session, name=self.item_title.value, price=price,
-                                                   stock=stock, thread_id=post.thread.id, description=self.item_description.value, tags=', '.join(tag_wanted))
+                                                   stock=stock, thread_id=post.thread.id, description=self.item_description.value, tags=", ".join(tag.name.lower() for tag in tags))
 
         embed.set_footer(text=f"Product ID: {product_id}")
         await post.message.edit(embed=embed)

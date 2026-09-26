@@ -35,7 +35,10 @@ async def order_look_up_process(interaction: discord.Interaction, order_id: int,
         return order, db_user
 
 async def update_forum(interaction, order):
-    thread = interaction.guild.get_thread(order.product.thread_id)
+    thread = interaction.guild.get_thread(order.product.thread_id) or await interaction.guild.fetch_channel(order.product.thread_id)
+    if thread.archived:
+        await thread.edit(archived=False)
+
     embed_data = await thread.fetch_message(order.product.thread_id)
 
     post_embed = embed_data.embeds[0]
