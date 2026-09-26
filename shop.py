@@ -3,9 +3,27 @@ import string
 from decimal import Decimal, InvalidOperation
 import discord
 from database import Session, User, Order, Product
-
+from orders import update_forum
 
 ### await interaction.response.defer(ephemeral=True) -- Always above slow process. [ephemeral == only the user sees who actioned - next follow up message inherits]
+
+async def validate_price_stock(price_stock: str, interaction: discord.Interaction):
+    parts = [ps.strip() for ps in price_stock.split(",")]
+
+    try:
+        price = Decimal(parts[0])
+        stock = int(parts[1])
+    except (InvalidOperation, ValueError):
+        await interaction.followup.send("Format must be `price, stock`, like `100, 10`.", ephemeral=True)
+        return None, None
+
+    if price <= 0 or stock < 0:
+        await interaction.followup.send("Price must be above 0 and stock can't be negative.", ephemeral=True)
+        return None, None
+
+    return price, stock
+
+
 
 class ShopButtons(discord.ui.View):
     def __init__(self, bot, guild_id, owner_role_id, order_category_id):
@@ -40,6 +58,10 @@ class ShopButtons(discord.ui.View):
                 return await interaction.followup.send(f"{member.mention} - Sorry this item is out of stock. Check back later!", ephemeral=True)
 
             db_user = await User.get_user(db_session=session, user_id=member.id)
+            user_orders = await User.get_user_orders(db_session=session, user_id=member.id, open_orders_only=True)
+
+            if len(user_orders) >= 3:
+                return await interaction.followup.send(f"{member.mention} - Sorry you have reached the maximum number of orders. Please cancel an order before placing a new one.", ephemeral=True)
 
             if not db_user:
                 return await interaction.followup.send(f"{member.mention} - Sorry you have no account. Unable to place order.", ephemeral=True)
@@ -124,6 +146,83 @@ class CancelOrderView(discord.ui.View):
             await interaction.channel.send(embed=embed)
 
 
+class EditItemModal(discord.ui.Modal, title="Edit Item"):
+    item_title = discord.ui.TextInput(label="Item Title", placeholder="Enter the item title")
+    item_description = discord.ui.TextInput(label="Card Description", placeholder="Enter the item description")
+    price_stock = discord.ui.TextInput(label="Price, Stock", placeholder="100, 10")
+    tags = discord.ui.Label(text="Tags (comma separated)", component=discord.ui.TextInput(placeholder="Amazon, 100-199PTS"))
+    image = discord.ui.Label(text="Image", component=discord.ui.FileUpload(max_values=1, required=False))
+
+    def __init__(self, product):
+        super().__init__()
+        self.item_title.default = product.name
+        self.item_description.default = product.description
+        self.price_stock.default = f"{int(product.price)}, {product.stock}"
+        self.tags.component.default = product.tags
+        self.product_id = product.product_id
+        self.thread_id = product.thread_id
+
+    async def on_submit(self, interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        price, stock = await validate_price_stock(self.price_stock.value, interaction)
+        if price is None:
+            return
+
+        async with Session() as session:
+            product = await Product.update_product(
+                db_session=session,
+                product_id=self.product_id,
+                name=self.item_title.value,
+                price=price,
+                stock=stock,
+                thread_id=self.thread_id,
+                description=self.item_description.value,
+                tags=", ".join(tag.strip().lower() for tag in self.tags.component.value.split(",")),
+            )
+
+            if not product:
+                return await interaction.followup.send("Product not found.", ephemeral=True)
+
+        thread = interaction.guild.get_thread(self.thread_id) or await interaction.guild.fetch_channel(self.thread_id)
+        message = await thread.fetch_message(self.thread_id)
+        embed = message.embeds[0]
+
+        embed.title = self.item_title.value
+        embed.description = f"Redeem {price} Betro Tokens for a {self.item_description.value}"
+
+        for index, field in enumerate(embed.fields):
+            if field.name == "Price":
+                embed.set_field_at(index, name="Price", value=f"{price} Betro Tokens", inline=field.inline)
+            elif field.name == "Stock":
+                embed.set_field_at(index, name="Stock", value=str(stock), inline=field.inline)
+
+        embed.set_image(url="attachment://item.png")
+
+        if self.image.component.values:
+            file = await self.image.component.values[0].to_file(filename="item.png")
+            await message.edit(embed=embed, attachments=[file])
+        else:
+            await message.edit(embed=embed)
+
+        title_changed = self.item_title.value != self.item_title.default
+
+        if title_changed:
+            await interaction.followup.send(
+                "Item updated. Note: Discord only allows 2 title changes per 10 minutes, "
+                "so if you've changed it more than that, the new title may take a few minutes to show.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.followup.send("Item updated.", ephemeral=True)
+
+        forum = thread.parent
+        tag_wanted = [tag.strip().lower() for tag in self.tags.component.value.split(",")]
+        new_tags = [tag for tag in forum.available_tags if tag.name.lower() in tag_wanted]
+        await thread.edit(applied_tags=new_tags[:5])
+
+        if title_changed:
+            await thread.edit(name=self.item_title.value)
 
 
 class AddItemModal(discord.ui.Modal, title="Add Item"):
@@ -144,18 +243,9 @@ class AddItemModal(discord.ui.Modal, title="Add Item"):
     async def on_submit(self, interaction):
         await interaction.response.defer(ephemeral=True)
 
-        parts = [ps.strip() for ps in self.price_stock.value.split(",")]
-        if len(parts) != 2:
-            return await interaction.followup.send("Format must be `price, stock`, like `100, 10`.", ephemeral=True)
-
-        try:
-            price = Decimal(parts[0])
-            stock = int(parts[1])
-        except (InvalidOperation, ValueError):
-            return await interaction.followup.send("Format must be `price, stock`, like `100, 10`.", ephemeral=True)
-
-        if price <= 0 or stock < 0:
-            return await interaction.followup.send("Price must be above 0 and stock can't be negative.", ephemeral=True)
+        price, stock = await validate_price_stock(self.price_stock.value, interaction)
+        if not price or not stock:
+            return
 
         forum = self.bot.get_channel(self.forum_channel)
         file = await self.image.component.values[0].to_file(filename="item.png")
@@ -175,7 +265,7 @@ class AddItemModal(discord.ui.Modal, title="Add Item"):
         tags = [tag for tag in forum.available_tags if tag.name.lower() in tag_wanted]
 
         post = await forum.create_thread(
-            name=f"{self.item_title.value} ({price} Betro Tokens)",
+            name=f"{self.item_title.value}",
             embed=embed,
             file=file,
             view=ShopButtons(bot=self.bot, guild_id=self.guild, owner_role_id=self.owner_role_id, order_category_id=self.order_category_id),
@@ -183,7 +273,8 @@ class AddItemModal(discord.ui.Modal, title="Add Item"):
         )
 
         async with Session() as session:
-            product_id = await Product.add_product(db_session=session, name=self.item_title.value, price=price, stock=stock, thread_id=post.thread.id)
+            product_id = await Product.add_product(db_session=session, name=self.item_title.value, price=price,
+                                                   stock=stock, thread_id=post.thread.id, description=self.item_description.value, tags=', '.join(tag_wanted))
 
         embed.set_footer(text=f"Product ID: {product_id}")
         await post.message.edit(embed=embed)

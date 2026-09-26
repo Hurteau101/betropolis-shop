@@ -7,8 +7,8 @@ from discord.ext import commands
 from helpers import is_in_allowed_channels, base_user_embed, get_single_user, get_user_information, WrongChannel, \
     base_admin_profile_embed, is_in_allowed_category
 from orders import GiftCardValueForm, GiftCardEmailView, PsychicalView, CloseConfirmationModal
-from shop import AddItemModal, ShopButtons, CancelOrderView
-from database import Session, User, Order
+from shop import AddItemModal, ShopButtons, CancelOrderView, EditItemModal
+from database import Session, User, Order, Product
 
 load_dotenv()
 
@@ -243,18 +243,14 @@ async def user_look_up(interaction: discord.Interaction, user_id: Optional[str] 
     if not member:
         await interaction.followup.send("User not found.", ephemeral=True)
 
-    db_user = await get_single_user(interaction, member, "User not found in the database.")
+    db_user, user_orders = await get_single_user(interaction, member, "User not found in the database.", get_orders=True)
+
     if not db_user:
         return
 
-    embed = base_admin_profile_embed(member=member, db_user=db_user, bot=bot)
+    embed = base_admin_profile_embed(member=member, db_user=db_user, bot=bot, user_orders=user_orders)
     await interaction.response.send_message(embed=embed)
 
-
-
-# @bot.tree.command(name="order", description="Place an order")
-# async def order(interaction: discord.Interaction):
-#     await interaction.response.send_modal(EmailModal())
 
 @bot.tree.command(name="reject-order")
 @app_commands.checks.has_role(CONFIGS["owner_role_id"])
@@ -331,6 +327,20 @@ async def add_item(interaction: discord.Interaction):
         owner_role_id=CONFIGS["owner_role_id"],
         order_category_id=CONFIGS["order_category_id"]
     ))
+
+@bot.tree.command(name="edit-item")
+@app_commands.checks.has_role(CONFIGS["owner_role_id"])
+@is_in_allowed_channels(CONFIGS["allowed_command_channel"])
+@app_commands.describe(
+    product_id="The product ID to edit"
+)
+async def add_item(interaction: discord.Interaction, product_id: int):
+    async with Session() as session:
+        product = await Product.get_product(session, product_id)
+        if not product:
+            return await interaction.response.send_message("Product not found.", ephemeral=True)
+
+    return await interaction.response.send_modal(EditItemModal(product))
 
 bot.run(CONFIGS["bot_token"])
 

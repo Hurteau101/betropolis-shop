@@ -1,7 +1,8 @@
 from typing import Optional
 import discord
 from discord import app_commands, Interaction
-from database import Session, User
+from database import Session, User, Order
+
 
 class WrongChannel(app_commands.CheckFailure):
     pass
@@ -19,13 +20,17 @@ async def get_user_information(interaction:discord.Interaction, user_id: Optiona
     return None
 
 
-async def get_single_user(interaction: discord.Interaction, member: discord.Member, error_message: str):
+async def get_single_user(interaction: discord.Interaction, member: discord.Member, error_message: str, get_orders: bool):
     """Get a single user"""
     async with Session() as session:
         db_user = await User.get_user(db_session=session, user_id=member.id)
         if not db_user:
             await interaction.response.send_message(error_message, ephemeral=True)
             return None
+
+        if get_orders:
+            user_orders = await User.get_user_orders(db_session=session, user_id=member.id)
+            return db_user, user_orders
 
     return db_user
 
@@ -43,10 +48,16 @@ def base_user_embed(title: str, member: discord.Member, discord_client: discord.
 
     return embed
 
-def base_admin_profile_embed(member: discord.Member, db_user: User, bot: discord.Client):
+def base_admin_profile_embed(member: discord.Member, db_user: User, bot: discord.Client, user_orders=None):
     embed = base_user_embed(title=f"{member.display_name}'s Profile", member=member, discord_client=bot)
     embed.add_field(name="User ID", value=member.id, inline=False)
     embed.add_field(name="Balance", value=f"{db_user.balance} Betro {'Tokens' if db_user.balance != 1 else 'Token' }", inline=False)
+
+    if user_orders:
+        open_orders = sum(1 for order in user_orders if not order.completed)
+        embed.add_field(name="Open Orders", value=open_orders, inline=False)
+        embed.add_field(name="Total Orders", value=len(user_orders), inline=False)
+
     embed.add_field(name="Created At", value=f"{db_user.created_date.strftime('%Y-%m-%d %H:%M:%S')}", inline=False)
 
     return embed

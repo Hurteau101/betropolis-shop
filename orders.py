@@ -1,6 +1,5 @@
 import discord
 from database import User, Session, Order, Product
-from shop import CancelOrderView
 
 async def order_look_up_process(interaction: discord.Interaction, order_id: int, member: discord.Member):
     async with Session() as session:

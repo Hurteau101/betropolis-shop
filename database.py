@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, URL, DateTime, ForeignKey, select, BigInteger, BIGINT, Numeric, update, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio.engine import create_async_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, selectinload
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, selectinload, joinedload
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -125,24 +125,64 @@ class User(Base):
         await db_session.execute(stmt)
         await db_session.commit()
 
+    @classmethod
+    async def get_user_orders(cls, db_session: AsyncSession, user_id: int, open_orders_only: bool = False):
+        stmt = select(Order).where(Order.user_id == user_id)
+
+        if open_orders_only:
+            stmt = stmt.where(Order.completed == False)
+
+        result = await db_session.execute(stmt)
+        return result.scalars().all()
+
+
 class Product(Base):
     __tablename__ = "products"
     product_id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column()
+    description: Mapped[str] = mapped_column()
+    tags: Mapped[str] = mapped_column()
     price: Mapped[decimal.Decimal] = mapped_column(Numeric(10, 2))
     stock: Mapped[int] = mapped_column()
     thread_id: Mapped[int] = mapped_column(BigInteger)
     orders: Mapped[list["Order"]] = relationship(back_populates="product")
 
     @classmethod
-    async def add_product(cls, db_session: AsyncSession, name: str, price: int | float | decimal.Decimal, stock: int, thread_id: int):
+    async def add_product(cls, db_session: AsyncSession, name: str, price: int | float | decimal.Decimal, stock: int, thread_id: int,
+                          description: str, tags: str):
         if isinstance(price, (int, float)):
             price = decimal.Decimal(str(price))
 
-        product = cls(name=name, price=price, stock=stock, thread_id=thread_id)
+        product = cls(name=name, price=price, stock=stock, thread_id=thread_id, description=description, tags=tags)
         db_session.add(product)
         await db_session.commit()
         return product.product_id
+
+    @classmethod
+    async def update_product(cls, db_session: AsyncSession, product_id: int, name: str,
+                             price: int | float | decimal.Decimal, stock: int, thread_id: int,
+                             description: str, tags: str):
+        if isinstance(price, (int, float)):
+            price = decimal.Decimal(str(price))
+
+        stmt = (
+            update(Product)
+            .where(Product.product_id == product_id)
+            .values(
+                name=name,
+                price=price,
+                stock=stock,
+                thread_id=thread_id,
+                description=description,
+                tags=tags,
+            )
+            .returning(Product)
+        )
+
+        result = await db_session.execute(stmt)
+        await db_session.commit()
+
+        return result.scalar_one_or_none()
 
     @classmethod
     async def get_product(cls, db_session: AsyncSession, product_id: int):
@@ -190,8 +230,6 @@ class Order(Base):
         await db_session.commit()
         return result.rowcount > 0
 
-
-
     @classmethod
     async def add_order(cls, db_session: AsyncSession, user_id: int, product_id: int, should_commit: bool = True):
         order = cls(user_id=user_id, product_id=product_id)
@@ -236,6 +274,8 @@ if __name__ == "__main__":
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
             await engine.dispose()
+
+
 
 
         asyncio.run(main())
