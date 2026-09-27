@@ -153,7 +153,8 @@ async def help(interaction: discord.Interaction):
     embed.add_field(
         name="Item Commands",
         value=(
-            "`/add-item` - Add an item to the shop"
+            "`/add-item` - Add an item to the shop\n"
+            "`/edit-item` - Edit an item in the shop\n"
         ),
         inline=False,
     )
@@ -186,7 +187,7 @@ async def help(interaction: discord.Interaction):
 async def check_balance(interaction: discord.Interaction):
     """User can check balance"""
     member = interaction.user
-    db_user = await get_single_user(interaction, member, "We could not find your account. Please contact one of the owners")
+    db_user, _ = await get_single_user(interaction, member, "We could not find your account. Please contact one of the owners", get_orders=True)
     if not db_user:
         return
 
