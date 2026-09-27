@@ -270,7 +270,9 @@ async def user_look_up(interaction: discord.Interaction, user_id: Optional[str] 
     member = await get_user_information(interaction, user_id, display_name)
 
     if not member:
-        await interaction.followup.send("User not found.", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message("User not found.", ephemeral=True)
+        return
 
     db_user, user_orders = await get_single_user(interaction, member, "User not found in the database.", get_orders=True)
 
@@ -280,164 +282,164 @@ async def user_look_up(interaction: discord.Interaction, user_id: Optional[str] 
     embed = base_admin_profile_embed(member=member, db_user=db_user, bot=bot, user_orders=user_orders)
     await interaction.response.send_message(embed=embed)
 
-# @bot.event
-# async def on_raw_thread_delete(payload: discord.RawMessageDeleteEvent):
-#     # Only care about forum channel IDs for shop
-#     if payload.parent_id != CONFIGS["forum_channel_id"]:
-#         return
-#
-#     log_channel = bot.get_channel(CONFIGS["log_channel_id"])
-#
-#     async with Session() as session:
-#         deleted_product = await Product.delete_product(session, payload.thread_id)
-#         if not deleted_product:
-#             guild = bot.get_guild(CONFIGS["guild_id"])
-#             admin_role = guild.get_role(CONFIGS["owner_role_id"])
-#
-#             embed = discord.Embed(
-#                 title="Product Deletion Error",
-#                 description=f"{admin_role.mention} - Could not delete product from the database.",
-#                 color=discord.Color.red()
-#             )
-#
-#             embed.add_field(name="Title", value=payload.thread.name, inline=False)
-#             embed.add_field(name="Thread ID", value=payload.thread_id, inline=False)
-#             embed.add_field(name="Additional Info", value="If this product wasn't manually created, please tag the developer, as there could be an underlying issue happening", inline=False)
-#
-#             await log_channel.send(embed=embed)
-#
-# @bot.event
-# async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
-#     # Ensure its a thread update.
-#     if entry.action != discord.AuditLogAction.thread_update:
-#         return
-#
-#     # Bot Edit
-#     if entry.user_id == bot.user.id:
-#         return
-#
-#     thread = entry.guild.get_thread(entry.target.id)
-#
-#     if thread is None or thread.parent_id != CONFIGS["forum_channel_id"]:
-#         return
-#
-#     log_channel = bot.get_channel(CONFIGS["log_channel_id"])
-#
-#     guild = bot.get_guild(CONFIGS["guild_id"])
-#     admin_role = guild.get_role(CONFIGS["owner_role_id"])
-#
-#     async with Session() as session:
-#         found_product = await Product.find_product_by_thread_id(db_session=session, thread_id=thread.id)
-#         if not found_product:
-#             embed = discord.Embed(
-#                 title="Product Edit Warning",
-#                 description=f"{admin_role.mention} - A product was manually edited in the forum channel, but it was not found in the database.",
-#                 color=discord.Color.red()
-#             )
-#
-#             embed.add_field(name="Title", value=thread.name, inline=False)
-#             embed.add_field(name="Thread ID", value=thread.id, inline=False)
-#             embed.add_field(name="Additional Info", value="If this product was originally created with /add-item, "
-#                                                           "please contact the developer immediately as the database "
-#                                                           "will be out of sync and could cause further bugs."
-#                                                           "Reminder to always use /edit-item instead of manual edits", inline=False)
-#
-#             return await log_channel.send(embed=embed)
-#
-#
-#         await Product.update_product(
-#             db_session=session,
-#             product_id=found_product.product_id,
-#             name=thread.name,
-#             price=found_product.price,
-#             stock=found_product.stock,
-#             thread_id=thread.id,
-#             description=found_product.description,
-#             tags=", ".join(tag.name.lower() for tag in thread.applied_tags),
-#         )
-#
-#         message = await thread.fetch_message(thread.id)
-#         embed = message.embeds[0]
-#         if embed.title != thread.name:
-#             embed.title = thread.name
-#             embed.set_image(url="attachment://item.png")
-#             await message.edit(embed=embed)
-#
-#         embed = discord.Embed(
-#             title="Product Edit Warning",
-#             description=f"{admin_role.mention} - A product was manually edited in the forum channel.",
-#             color=discord.Color.red()
-#         )
-#
-#         embed.add_field(name="Title", value=thread.name, inline=False)
-#         embed.add_field(name="Thread ID", value=thread.id, inline=False)
-#         embed.add_field(name="Additional Info", value="This product was updated in the database. Please do not edit"
-#                                                       "a product manually, always use /edit-item to prevent further issues",
-#                         inline=False)
-#
-#         await log_channel.send(embed=embed)
-#
-# @bot.event
-# async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
-#     # A forum post's starter message has the same ID as its thread
-#     if payload.message_id != payload.channel_id:
-#         return
-#
-#     try:
-#         thread = await bot.fetch_channel(payload.channel_id)
-#     except discord.NotFound:
-#         return  # Whole thread deleted, already have catch.
-#
-#     if thread.parent_id != CONFIGS["forum_channel_id"]:
-#         return
-#
-#     async with Session() as session:
-#         product = await Product.find_product_by_thread_id(db_session=session, thread_id=thread.id)
-#
-#     if not product:
-#         return
-#
-#     log_channel = bot.get_channel(CONFIGS["log_channel_id"])
-#     admin_role = thread.guild.get_role(CONFIGS["owner_role_id"])
-#
-#     embed = discord.Embed(
-#         title="Product Listing Deleted",
-#         description=f"{admin_role.mention} - A product listing message was deleted in the forum channel.",
-#         color=discord.Color.red()
-#     )
-#
-#     embed.add_field(name="Title", value=thread.name, inline=False)
-#     embed.add_field(name="Thread ID", value=thread.id, inline=False)
-#     embed.add_field(name="Additional Info", value="This post was deleted. Please re-add the item with /add-item. ", inline=False)
-#
-#     await thread.delete(reason="Invalid Add")
-#     await log_channel.send(embed=embed)
-#
-# @bot.event
-# async def on_thread_create(thread: discord.Thread):
-#     # Only care about forum channel IDs for shop
-#     if thread.parent_id != CONFIGS["forum_channel_id"]:
-#         return
-#
-#     if thread.owner_id == bot.user.id:
-#         return
-#
-#     log_channel = bot.get_channel(CONFIGS["log_channel_id"])
-#     guild = bot.get_guild(CONFIGS["guild_id"])
-#     admin_role = guild.get_role(CONFIGS["owner_role_id"])
-#
-#     embed = discord.Embed(
-#         title="Manual Product Creation Warning",
-#         description=f"{admin_role.mention}",
-#         color=discord.Color.red()
-#     )
-#
-#     embed.add_field(name="Title", value=thread.name, inline=False)
-#     embed.add_field(name="Thread ID", value=thread.id, inline=False)
-#     embed.add_field(name="Additional Info", value="This product was created manually and should never be created through the actual forum. This product was deleted. Please use /add-item instead.", inline=False)
-#
-#     await thread.delete(reason="Invalid Delete")
-#     await log_channel.send(embed=embed)
+@bot.event
+async def on_raw_thread_delete(payload: discord.RawMessageDeleteEvent):
+    # Only care about forum channel IDs for shop
+    if payload.parent_id != CONFIGS["forum_channel_id"]:
+        return
+
+    log_channel = bot.get_channel(CONFIGS["log_channel_id"])
+
+    async with Session() as session:
+        deleted_product = await Product.delete_product(session, payload.thread_id)
+        if not deleted_product:
+            guild = bot.get_guild(CONFIGS["guild_id"])
+            admin_role = guild.get_role(CONFIGS["owner_role_id"])
+
+            embed = discord.Embed(
+                title="Product Deletion Error",
+                description=f"{admin_role.mention} - Could not delete product from the database.",
+                color=discord.Color.red()
+            )
+
+            embed.add_field(name="Title", value=payload.thread.name, inline=False)
+            embed.add_field(name="Thread ID", value=payload.thread_id, inline=False)
+            embed.add_field(name="Additional Info", value="If this product wasn't manually created, please tag the developer, as there could be an underlying issue happening", inline=False)
+
+            await log_channel.send(embed=embed)
+
+@bot.event
+async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
+    # Ensure its a thread update.
+    if entry.action != discord.AuditLogAction.thread_update:
+        return
+
+    # Bot Edit
+    if entry.user_id == bot.user.id:
+        return
+
+    thread = entry.guild.get_thread(entry.target.id)
+
+    if thread is None or thread.parent_id != CONFIGS["forum_channel_id"]:
+        return
+
+    log_channel = bot.get_channel(CONFIGS["log_channel_id"])
+
+    guild = bot.get_guild(CONFIGS["guild_id"])
+    admin_role = guild.get_role(CONFIGS["owner_role_id"])
+
+    async with Session() as session:
+        found_product = await Product.find_product_by_thread_id(db_session=session, thread_id=thread.id)
+        if not found_product:
+            embed = discord.Embed(
+                title="Product Edit Warning",
+                description=f"{admin_role.mention} - A product was manually edited in the forum channel, but it was not found in the database.",
+                color=discord.Color.red()
+            )
+
+            embed.add_field(name="Title", value=thread.name, inline=False)
+            embed.add_field(name="Thread ID", value=thread.id, inline=False)
+            embed.add_field(name="Additional Info", value="If this product was originally created with /add-item, "
+                                                          "please contact the developer immediately as the database "
+                                                          "will be out of sync and could cause further bugs."
+                                                          "Reminder to always use /edit-item instead of manual edits", inline=False)
+
+            return await log_channel.send(embed=embed)
+
+
+        await Product.update_product(
+            db_session=session,
+            product_id=found_product.product_id,
+            name=thread.name,
+            price=found_product.price,
+            stock=found_product.stock,
+            thread_id=thread.id,
+            description=found_product.description,
+            tags=", ".join(tag.name.lower() for tag in thread.applied_tags),
+        )
+
+        message = await thread.fetch_message(thread.id)
+        embed = message.embeds[0]
+        if embed.title != thread.name:
+            embed.title = thread.name
+            embed.set_image(url="attachment://item.png")
+            await message.edit(embed=embed)
+
+        embed = discord.Embed(
+            title="Product Edit Warning",
+            description=f"{admin_role.mention} - A product was manually edited in the forum channel.",
+            color=discord.Color.red()
+        )
+
+        embed.add_field(name="Title", value=thread.name, inline=False)
+        embed.add_field(name="Thread ID", value=thread.id, inline=False)
+        embed.add_field(name="Additional Info", value="This product was updated in the database. Please do not edit"
+                                                      "a product manually, always use /edit-item to prevent further issues",
+                        inline=False)
+
+        await log_channel.send(embed=embed)
+
+@bot.event
+async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
+    # A forum post's starter message has the same ID as its thread
+    if payload.message_id != payload.channel_id:
+        return
+
+    try:
+        thread = await bot.fetch_channel(payload.channel_id)
+    except discord.NotFound:
+        return  # Whole thread deleted, already have catch.
+
+    if thread.parent_id != CONFIGS["forum_channel_id"]:
+        return
+
+    async with Session() as session:
+        product = await Product.find_product_by_thread_id(db_session=session, thread_id=thread.id)
+
+    if not product:
+        return
+
+    log_channel = bot.get_channel(CONFIGS["log_channel_id"])
+    admin_role = thread.guild.get_role(CONFIGS["owner_role_id"])
+
+    embed = discord.Embed(
+        title="Product Listing Deleted",
+        description=f"{admin_role.mention} - A product listing message was deleted in the forum channel.",
+        color=discord.Color.red()
+    )
+
+    embed.add_field(name="Title", value=thread.name, inline=False)
+    embed.add_field(name="Thread ID", value=thread.id, inline=False)
+    embed.add_field(name="Additional Info", value="This post was deleted. Please re-add the item with /add-item. ", inline=False)
+
+    await thread.delete(reason="Invalid Add")
+    await log_channel.send(embed=embed)
+
+@bot.event
+async def on_thread_create(thread: discord.Thread):
+    # Only care about forum channel IDs for shop
+    if thread.parent_id != CONFIGS["forum_channel_id"]:
+        return
+
+    if thread.owner_id == bot.user.id:
+        return
+
+    log_channel = bot.get_channel(CONFIGS["log_channel_id"])
+    guild = bot.get_guild(CONFIGS["guild_id"])
+    admin_role = guild.get_role(CONFIGS["owner_role_id"])
+
+    embed = discord.Embed(
+        title="Manual Product Creation Warning",
+        description=f"{admin_role.mention}",
+        color=discord.Color.red()
+    )
+
+    embed.add_field(name="Title", value=thread.name, inline=False)
+    embed.add_field(name="Thread ID", value=thread.id, inline=False)
+    embed.add_field(name="Additional Info", value="This product was created manually and should never be created through the actual forum. This product was deleted. Please use /add-item instead.", inline=False)
+
+    await thread.delete(reason="Invalid Delete")
+    await log_channel.send(embed=embed)
 
 
 @bot.tree.command(name="reject-order")
