@@ -424,22 +424,28 @@ async def on_thread_create(thread: discord.Thread):
     if thread.owner_id == bot.user.id:
         return
 
-    log_channel = bot.get_channel(CONFIGS["log_channel_id"])
-    guild = bot.get_guild(CONFIGS["guild_id"])
-    admin_role = guild.get_role(CONFIGS["owner_role_id"])
+    should_bypass = next((
+        True
+        for tag in thread.applied_tags if tag.name.lower() == "announcement"
+    ), False)
 
-    embed = discord.Embed(
-        title="Manual Product Creation Warning",
-        description=f"{admin_role.mention}",
-        color=discord.Color.red()
-    )
+    if not should_bypass:
+        log_channel = bot.get_channel(CONFIGS["log_channel_id"])
+        guild = bot.get_guild(CONFIGS["guild_id"])
+        admin_role = guild.get_role(CONFIGS["owner_role_id"])
 
-    embed.add_field(name="Title", value=thread.name, inline=False)
-    embed.add_field(name="Thread ID", value=thread.id, inline=False)
-    embed.add_field(name="Additional Info", value="This product was created manually and should never be created through the actual forum. This product was deleted. Please use /add-item instead.", inline=False)
+        embed = discord.Embed(
+            title="Manual Product Creation Warning",
+            description=f"{admin_role.mention}",
+            color=discord.Color.red()
+        )
 
-    await thread.delete(reason="Invalid Delete")
-    await log_channel.send(embed=embed)
+        embed.add_field(name="Title", value=thread.name, inline=False)
+        embed.add_field(name="Thread ID", value=thread.id, inline=False)
+        embed.add_field(name="Additional Info", value="This product was created manually and should never be created through the actual forum. This product was deleted. Please use /add-item instead.", inline=False)
+
+        await thread.delete(reason="Invalid Delete")
+        await log_channel.send(embed=embed)
 
 
 @bot.tree.command(name="reject-order")
