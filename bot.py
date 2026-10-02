@@ -290,7 +290,7 @@ async def on_raw_thread_delete(payload: discord.RawMessageDeleteEvent):
 
     log_channel = bot.get_channel(CONFIGS["log_channel_id"])
 
-    should_bypass = next((
+    should_bypass = payload.thread is not None and next((
         True
         for tag in payload.thread.applied_tags if tag.name.lower() == "announcement"
     ), False)
@@ -308,7 +308,7 @@ async def on_raw_thread_delete(payload: discord.RawMessageDeleteEvent):
                     color=discord.Color.red()
                 )
 
-                embed.add_field(name="Title", value=payload.thread.name, inline=False)
+                embed.add_field(name="Title", value=payload.thread.name if payload.thread else "Unknown (not cached)", inline=False)
                 embed.add_field(name="Thread ID", value=payload.thread_id, inline=False)
                 embed.add_field(name="Additional Info", value="If this product wasn't manually created, please tag the developer, as there could be an underlying issue happening", inline=False)
 
@@ -334,7 +334,7 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
     guild = bot.get_guild(CONFIGS["guild_id"])
     admin_role = guild.get_role(CONFIGS["owner_role_id"])
 
-    should_bypass = next((
+    should_bypass = thread is not None and next((
         True
         for tag in thread.applied_tags if tag.name.lower() == "announcement"
     ), False)
@@ -436,7 +436,7 @@ async def on_thread_create(thread: discord.Thread):
     if thread.owner_id == bot.user.id:
         return
 
-    should_bypass = next((
+    should_bypass = thread is not None and next((
         True
         for tag in thread.applied_tags if tag.name.lower() == "announcement"
     ), False)
