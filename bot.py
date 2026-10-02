@@ -290,23 +290,29 @@ async def on_raw_thread_delete(payload: discord.RawMessageDeleteEvent):
 
     log_channel = bot.get_channel(CONFIGS["log_channel_id"])
 
-    async with Session() as session:
-        deleted_product = await Product.delete_product(session, payload.thread_id)
-        if not deleted_product:
-            guild = bot.get_guild(CONFIGS["guild_id"])
-            admin_role = guild.get_role(CONFIGS["owner_role_id"])
+    should_bypass = next((
+        True
+        for tag in payload.thread.applied_tags if tag.name.lower() == "announcement"
+    ), False)
 
-            embed = discord.Embed(
-                title="Product Deletion Error",
-                description=f"{admin_role.mention} - Could not delete product from the database.",
-                color=discord.Color.red()
-            )
+    if not should_bypass:
+        async with Session() as session:
+            deleted_product = await Product.delete_product(session, payload.thread_id)
+            if not deleted_product:
+                guild = bot.get_guild(CONFIGS["guild_id"])
+                admin_role = guild.get_role(CONFIGS["owner_role_id"])
 
-            embed.add_field(name="Title", value=payload.thread.name, inline=False)
-            embed.add_field(name="Thread ID", value=payload.thread_id, inline=False)
-            embed.add_field(name="Additional Info", value="If this product wasn't manually created, please tag the developer, as there could be an underlying issue happening", inline=False)
+                embed = discord.Embed(
+                    title="Product Deletion Error",
+                    description=f"{admin_role.mention} - Could not delete product from the database.",
+                    color=discord.Color.red()
+                )
 
-            await log_channel.send(embed=embed)
+                embed.add_field(name="Title", value=payload.thread.name, inline=False)
+                embed.add_field(name="Thread ID", value=payload.thread_id, inline=False)
+                embed.add_field(name="Additional Info", value="If this product wasn't manually created, please tag the developer, as there could be an underlying issue happening", inline=False)
+
+                await log_channel.send(embed=embed)
 
 @bot.event
 async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
@@ -328,56 +334,62 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
     guild = bot.get_guild(CONFIGS["guild_id"])
     admin_role = guild.get_role(CONFIGS["owner_role_id"])
 
-    async with Session() as session:
-        found_product = await Product.find_product_by_thread_id(db_session=session, thread_id=thread.id)
-        if not found_product:
+    should_bypass = next((
+        True
+        for tag in thread.applied_tags if tag.name.lower() == "announcement"
+    ), False)
+
+    if not should_bypass:
+        async with Session() as session:
+            found_product = await Product.find_product_by_thread_id(db_session=session, thread_id=thread.id)
+            if not found_product:
+                embed = discord.Embed(
+                    title="Product Edit Warning",
+                    description=f"{admin_role.mention} - A product was manually edited in the forum channel, but it was not found in the database.",
+                    color=discord.Color.red()
+                )
+
+                embed.add_field(name="Title", value=thread.name, inline=False)
+                embed.add_field(name="Thread ID", value=thread.id, inline=False)
+                embed.add_field(name="Additional Info", value="If this product was originally created with /add-item, "
+                                                              "please contact the developer immediately as the database "
+                                                              "will be out of sync and could cause further bugs. "
+                                                              "Reminder to always use /edit-item instead of manual edits", inline=False)
+
+                return await log_channel.send(embed=embed)
+
+
+            await Product.update_product(
+                db_session=session,
+                product_id=found_product.product_id,
+                name=thread.name,
+                price=found_product.price,
+                stock=found_product.stock,
+                thread_id=thread.id,
+                description=found_product.description,
+                tags=", ".join(tag.name.lower() for tag in thread.applied_tags),
+            )
+
+            message = await thread.fetch_message(thread.id)
+            embed = message.embeds[0]
+            if embed.title != thread.name:
+                embed.title = thread.name
+                embed.set_image(url="attachment://item.png")
+                await message.edit(embed=embed)
+
             embed = discord.Embed(
                 title="Product Edit Warning",
-                description=f"{admin_role.mention} - A product was manually edited in the forum channel, but it was not found in the database.",
+                description=f"{admin_role.mention} - A product was manually edited in the forum channel.",
                 color=discord.Color.red()
             )
 
             embed.add_field(name="Title", value=thread.name, inline=False)
             embed.add_field(name="Thread ID", value=thread.id, inline=False)
-            embed.add_field(name="Additional Info", value="If this product was originally created with /add-item, "
-                                                          "please contact the developer immediately as the database "
-                                                          "will be out of sync and could cause further bugs."
-                                                          "Reminder to always use /edit-item instead of manual edits", inline=False)
+            embed.add_field(name="Additional Info", value="This product was updated in the database. Please do not edit "
+                                                          "a product manually, always use /edit-item to prevent further issues",
+                            inline=False)
 
-            return await log_channel.send(embed=embed)
-
-
-        await Product.update_product(
-            db_session=session,
-            product_id=found_product.product_id,
-            name=thread.name,
-            price=found_product.price,
-            stock=found_product.stock,
-            thread_id=thread.id,
-            description=found_product.description,
-            tags=", ".join(tag.name.lower() for tag in thread.applied_tags),
-        )
-
-        message = await thread.fetch_message(thread.id)
-        embed = message.embeds[0]
-        if embed.title != thread.name:
-            embed.title = thread.name
-            embed.set_image(url="attachment://item.png")
-            await message.edit(embed=embed)
-
-        embed = discord.Embed(
-            title="Product Edit Warning",
-            description=f"{admin_role.mention} - A product was manually edited in the forum channel.",
-            color=discord.Color.red()
-        )
-
-        embed.add_field(name="Title", value=thread.name, inline=False)
-        embed.add_field(name="Thread ID", value=thread.id, inline=False)
-        embed.add_field(name="Additional Info", value="This product was updated in the database. Please do not edit"
-                                                      "a product manually, always use /edit-item to prevent further issues",
-                        inline=False)
-
-        await log_channel.send(embed=embed)
+            await log_channel.send(embed=embed)
 
 @bot.event
 async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
